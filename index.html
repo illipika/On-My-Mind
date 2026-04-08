@@ -690,7 +690,7 @@
     document.getElementById('cardDetailClose').addEventListener('click', () => {
       document.getElementById('cardDetail').classList.remove('open');
       if (selectedNode) {
-        selectedNode.mesh.material.emissiveIntensity = 0;
+        selectedNode.mesh.material.opacity = 0.92;
         selectedNode = null;
       }
       controls.autoRotate = true;
@@ -703,10 +703,10 @@
           connectSource = null;
           document.getElementById('connectBtn').classList.remove('active');
           document.getElementById('connectionHint').classList.remove('show');
-          if (nodes.length) nodes.forEach(n => { n.mesh.material.emissiveIntensity = 0; });
+          if (nodes.length) nodes.forEach(n => { n.mesh.material.opacity = 0.92; });
         }
         document.getElementById('cardDetail').classList.remove('open');
-        if (selectedNode) { selectedNode.mesh.material.emissiveIntensity = 0; selectedNode = null; }
+        if (selectedNode) { selectedNode.mesh.material.opacity = 0.92; selectedNode = null; }
         controls.autoRotate = true;
       }
     });
@@ -718,72 +718,126 @@
       if (!connectMode) {
         connectSource = null;
         document.getElementById('connectionHint').classList.remove('show');
-        nodes.forEach(n => { if (n !== selectedNode) n.mesh.material.emissiveIntensity = 0; });
+        nodes.forEach(n => { if (n !== selectedNode) n.mesh.material.opacity = 0.92; });
       }
     });
 
     animate();
   }
 
-  function makeNodeTexture() {
-    const size = 256;
+  function makeCardTexture(card) {
+    const W = 512, H = 384;
     const c = document.createElement('canvas');
-    c.width = size; c.height = size;
+    c.width = W; c.height = H;
     const ctx = c.getContext('2d');
-    ctx.fillStyle = 'rgba(7,7,6,0)';
-    ctx.fillRect(0, 0, size, size);
-    const grad = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
-    grad.addColorStop(0,   'rgba(237,233,224,0.9)');
-    grad.addColorStop(0.3, 'rgba(237,233,224,0.4)');
-    grad.addColorStop(0.7, 'rgba(237,233,224,0.1)');
-    grad.addColorStop(1,   'rgba(237,233,224,0)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, size, size);
+
+    if (card.img) {
+      // Draw image
+      const img = new Image();
+      img.src = card.img;
+      // Draw synchronously-ish by checking if already loaded
+      ctx.fillStyle = '#0e0d0b';
+      ctx.fillRect(0, 0, W, H);
+      try {
+        ctx.drawImage(img, 0, 0, W, H * 0.75);
+      } catch(e) {}
+      // Card footer
+      ctx.fillStyle = '#0e0d0b';
+      ctx.fillRect(0, H * 0.75, W, H * 0.25);
+      ctx.fillStyle = 'rgba(46,44,38,0.8)';
+      ctx.fillRect(0, H * 0.73, W, 2);
+      ctx.fillStyle = '#8a8278';
+      ctx.font = '18px serif';
+      ctx.fillText(card.cat || '', 20, H * 0.79);
+      ctx.fillStyle = '#ede9e0';
+      ctx.font = 'italic 22px serif';
+      const title = card.title || '';
+      ctx.fillText(title.length > 32 ? title.slice(0,32)+'…' : title, 20, H * 0.88);
+    } else {
+      // Text-only card
+      ctx.fillStyle = '#0e0d0b';
+      ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = '#2e2c26';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(8, 8, W-16, H-16);
+      ctx.fillStyle = '#2e2c26';
+      ctx.fillRect(0, H * 0.85, W, H * 0.15);
+      ctx.fillStyle = '#8a8278';
+      ctx.font = '18px serif';
+      ctx.fillText(card.cat || '', 20, 50);
+      ctx.fillStyle = '#ede9e0';
+      ctx.font = 'italic bold 28px serif';
+      // Word-wrap title
+      const words = (card.title || '').split(' ');
+      let line = '', y = H / 2 - 30;
+      for (const w of words) {
+        const test = line + w + ' ';
+        if (ctx.measureText(test).width > W - 40 && line) {
+          ctx.fillText(line, 20, y); line = w + ' '; y += 40;
+        } else { line = test; }
+      }
+      ctx.fillText(line, 20, y);
+      // Subtle ornament
+      ctx.fillStyle = '#2e2c26';
+      ctx.font = '14px serif';
+      ctx.fillText('· · ·', W/2 - 20, H * 0.9);
+    }
     return new THREE.CanvasTexture(c);
   }
 
   function buildNodes() {
-    nodes.forEach(n => { scene.remove(n.mesh); scene.remove(n.glowMesh); });
-    document.getElementById('labels-container').innerHTML = '';
+    nodes.forEach(n => {
+      scene.remove(n.mesh);
+      if (n.glowMesh) scene.remove(n.glowMesh);
+    });
+    const labelsContainer = document.getElementById('labels-container');
+    labelsContainer.innerHTML = '';
     nodes = [];
 
     const cards = loadCards();
     const savedPos = loadPositions();
-    const glowTex = makeNodeTexture();
 
     cards.forEach((card, i) => {
       const cp = clusterPos(card.cat);
       const savedP = savedPos[i];
-      const spread = 35;
-      const h = hashStr((card.title || '') + i);
-      const x = savedP ? savedP.x : cp.x + ((Math.abs(h)       % spread) - spread/2);
-      const y = savedP ? savedP.y : cp.y + ((Math.abs(h >> 4)  % spread) - spread/2);
-      const z = savedP ? savedP.z : cp.z + ((Math.abs(h >> 8)  % spread) - spread/2);
+      const spread = 40;
+      const h = hashStr(card.title + i);
+      const x = savedP ? savedP.x : cp.x + ((Math.abs(h) % spread) - spread/2);
+      const y = savedP ? savedP.y : cp.y + ((Math.abs(h >> 4) % spread) - spread/2);
+      const z = savedP ? savedP.z : cp.z + ((Math.abs(h >> 8) % spread) - spread/2);
 
-      const geo = new THREE.SphereGeometry(6, 20, 20);
-      const mat = new THREE.MeshStandardMaterial({
-        color: 0xede9e0, emissive: 0xede9e0, emissiveIntensity: 0.4,
-        transparent: true, opacity: 0.85, roughness: 0.6, metalness: 0.1
-      });
+      // Image card plane
+      const W = 30, H = 22;
+      const geo = new THREE.PlaneGeometry(W, H);
+      const tex = makeCardTexture(card);
+      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.92, side: THREE.DoubleSide });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x, y, z);
+      // Slight random tilt
+      mesh.rotation.y = ((Math.abs(h >> 12) % 60) - 30) * Math.PI / 180;
+      mesh.rotation.x = ((Math.abs(h >> 20) % 20) - 10) * Math.PI / 180;
       mesh.userData = { index: i, card };
       scene.add(mesh);
 
-      const spriteMat = new THREE.SpriteMaterial({
-        map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+      // Glow behind the card
+      const glowGeo = new THREE.PlaneGeometry(W + 10, H + 10);
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: 0x2e2c26, transparent: true, opacity: 0.3,
+        side: THREE.DoubleSide, depthWrite: false
       });
-      const sprite = new THREE.Sprite(spriteMat);
-      sprite.scale.set(50, 50, 1);
-      sprite.position.copy(mesh.position);
-      scene.add(sprite);
+      const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+      glowMesh.position.set(x, y, z - 0.5);
+      glowMesh.rotation.copy(mesh.rotation);
+      glowMesh.userData.isGlow = true;
+      scene.add(glowMesh);
 
+      // HTML label below the card
       const label = document.createElement('div');
       label.className = 'node-label';
       label.textContent = card.title || card.cat || '—';
-      document.getElementById('labels-container').appendChild(label);
+      labelsContainer.appendChild(label);
 
-      nodes.push({ mesh, glowMesh: sprite, label, card, index: i });
+      nodes.push({ mesh, glowMesh, label, card, index: i, x, y, z });
     });
   }
 
@@ -860,7 +914,7 @@
     if (connectMode) {
       if (!connectSource) {
         connectSource = node;
-        node.mesh.material.emissiveIntensity = 0.6;
+        node.mesh.material.opacity = 1.0;
         document.getElementById('connectionHint').classList.add('show');
       } else if (connectSource !== node) {
         const conns = loadConnections();
@@ -869,7 +923,7 @@
           (c.from === node.index && c.to === connectSource.index)
         );
         if (!exists) { conns.push({ from: connectSource.index, to: node.index }); saveConnections(conns); }
-        connectSource.mesh.material.emissiveIntensity = 0;
+        connectSource.mesh.material.opacity = 0.92;
         connectSource = null;
         connectMode = false;
         document.getElementById('connectBtn').classList.remove('active');
@@ -879,9 +933,9 @@
       return;
     }
 
-    if (selectedNode) selectedNode.mesh.material.emissiveIntensity = 0;
+    if (selectedNode) selectedNode.mesh.material.opacity = 0.92;
     selectedNode = node;
-    node.mesh.material.emissiveIntensity = 0.5;
+    node.mesh.material.opacity = 1.0;
     controls.autoRotate = false;
     showCardDetail(node.card, node.index);
   }
@@ -937,7 +991,7 @@
       if (pos.z < 1) {
         n.label.style.display = 'block';
         n.label.style.left = x + 'px';
-        n.label.style.top  = (y + 18) + 'px';
+        n.label.style.top  = (y + 60) + 'px';
       } else {
         n.label.style.display = 'none';
       }
@@ -950,10 +1004,10 @@
     // Hover highlight
     raycaster.setFromCamera(mouse, camera);
     const hits = raycaster.intersectObjects(nodes.map(n => n.mesh));
-    nodes.forEach(n => { if (n !== selectedNode) n.mesh.material.emissiveIntensity = 0; });
+    nodes.forEach(n => { if (n !== selectedNode) n.mesh.material.opacity = 0.92; });
     if (hits.length) {
       const hovered = nodes.find(n => n.mesh === hits[0].object);
-      if (hovered && hovered !== selectedNode) hovered.mesh.material.emissiveIntensity = 0.25;
+      if (hovered && hovered !== selectedNode) hovered.mesh.material.opacity = 1.0;
       document.getElementById('palace-canvas').style.cursor = 'pointer';
     } else {
       document.getElementById('palace-canvas').style.cursor = 'crosshair';
