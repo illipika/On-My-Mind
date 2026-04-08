@@ -661,8 +661,8 @@
     mouse = new THREE.Vector2(-9999, -9999);
 
     // Ambient + point lights
-    scene.add(new THREE.AmbientLight(0xede9e0, 0.15));
-    const pt = new THREE.PointLight(0xede9e0, 0.8, 600);
+    scene.add(new THREE.AmbientLight(0xede9e0, 0.6));
+    const pt = new THREE.PointLight(0xede9e0, 1.5, 800);
     pt.position.set(0, 100, 0);
     scene.add(pt);
 
@@ -733,8 +733,9 @@
     ctx.fillStyle = 'rgba(7,7,6,0)';
     ctx.fillRect(0, 0, size, size);
     const grad = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
-    grad.addColorStop(0,   'rgba(237,233,224,0.25)');
-    grad.addColorStop(0.4, 'rgba(237,233,224,0.08)');
+    grad.addColorStop(0,   'rgba(237,233,224,0.9)');
+    grad.addColorStop(0.3, 'rgba(237,233,224,0.4)');
+    grad.addColorStop(0.7, 'rgba(237,233,224,0.1)');
     grad.addColorStop(1,   'rgba(237,233,224,0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, size, size);
@@ -759,9 +760,9 @@
       const y = savedP ? savedP.y : cp.y + ((Math.abs(h >> 4)  % spread) - spread/2);
       const z = savedP ? savedP.z : cp.z + ((Math.abs(h >> 8)  % spread) - spread/2);
 
-      const geo = new THREE.SphereGeometry(3.5, 16, 16);
+      const geo = new THREE.SphereGeometry(6, 20, 20);
       const mat = new THREE.MeshStandardMaterial({
-        color: 0xede9e0, emissive: 0xede9e0, emissiveIntensity: 0,
+        color: 0xede9e0, emissive: 0xede9e0, emissiveIntensity: 0.4,
         transparent: true, opacity: 0.85, roughness: 0.6, metalness: 0.1
       });
       const mesh = new THREE.Mesh(geo, mat);
@@ -773,7 +774,7 @@
         map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
       });
       const sprite = new THREE.Sprite(spriteMat);
-      sprite.scale.set(24, 24, 1);
+      sprite.scale.set(50, 50, 1);
       sprite.position.copy(mesh.position);
       scene.add(sprite);
 
