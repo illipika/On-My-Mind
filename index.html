@@ -385,7 +385,79 @@
       header { padding: 70px 24px 50px; }
       .add-btn { bottom: 20px; right: 20px; }
     }
+    /* ── 3D MIND PALACE ── */
+    #palace-canvas { position: fixed; inset: 0; z-index: 1; }
+    .content { position: relative; z-index: 10; pointer-events: none; }
+    header { pointer-events: all; }
+    .search-wrap { pointer-events: all; }
+    .node-label {
+      position: absolute; pointer-events: none; z-index: 50;
+      font-family: 'IM Fell English', serif; font-style: italic;
+      font-size: 0.7rem; letter-spacing: 0.2em; color: var(--ink);
+      opacity: 0.7; white-space: nowrap;
+      text-shadow: 0 0 8px rgba(7,7,6,0.9);
+      transform: translateX(-50%);
+    }
+    #labels-container { position: fixed; inset: 0; z-index: 50; pointer-events: none; }
+    .card-detail {
+      position: fixed; right: 0; top: 0; bottom: 0; width: 380px;
+      background: rgba(7,7,6,0.97); border-left: 1px solid var(--border-mid);
+      z-index: 200; padding: 70px 36px 36px; display: none; overflow-y: auto;
+      pointer-events: all;
+    }
+    .card-detail.open { display: block; }
+    .card-detail-close {
+      position: absolute; top: 24px; right: 24px;
+      background: none; border: none; color: var(--ink-dim);
+      font-size: 1.1rem; cursor: pointer; opacity: 0.5;
+      font-family: 'IM Fell English', serif;
+    }
+    .card-detail-close:hover { opacity: 1; }
+    .card-detail img { width: 100%; height: auto; margin-bottom: 20px; opacity: 0.9; }
+    .card-detail .card-cat {
+      display: block; font-family: 'IM Fell English', serif; font-style: italic;
+      font-size: 0.65rem; letter-spacing: 0.3em; color: var(--ink-dim);
+      opacity: 0.6; margin-bottom: 8px;
+    }
+    .card-detail .card-title {
+      font-family: 'IM Fell English', serif; font-size: 1.1rem;
+      font-weight: 400; color: var(--ink); line-height: 1.4; margin-bottom: 16px;
+    }
+    .card-detail .card-desc {
+      font-family: 'Cormorant Garamond', serif; font-style: italic;
+      font-size: 0.9rem; color: var(--ink-dim); line-height: 1.9; font-weight: 300;
+    }
+    .card-detail-rule { width: 100%; height: 1px; background: var(--border-mid); margin-bottom: 18px; }
+    .card-detail-controls { display: flex; gap: 10px; margin-top: 24px; }
+    .card-detail-controls button {
+      flex: 1; padding: 9px; background: none; border: 1px solid var(--border-mid);
+      color: var(--ink-dim); font-family: 'IM Fell English', serif; font-style: italic;
+      font-size: 0.75rem; letter-spacing: 0.15em; cursor: pointer;
+      transition: border-color 0.3s, color 0.3s;
+    }
+    .card-detail-controls button:hover { border-color: var(--ink-dim); color: var(--ink); }
+    .connection-hint {
+      position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+      font-family: 'IM Fell English', serif; font-style: italic;
+      font-size: 0.7rem; letter-spacing: 0.3em; color: var(--ink-dim);
+      opacity: 0; transition: opacity 0.5s; pointer-events: none; z-index: 100;
+    }
+    .connection-hint.show { opacity: 0.4; }
+    .connect-btn {
+      position: fixed; bottom: 36px; left: 36px;
+      width: 52px; height: 52px; border-radius: 50%;
+      background: var(--bg); border: 1px solid var(--border-mid);
+      color: var(--ink-dim); font-size: 0.9rem; line-height: 1;
+      cursor: pointer; z-index: 500; pointer-events: all;
+      display: none; align-items: center; justify-content: center;
+      transition: border-color 0.3s, opacity 0.3s;
+      font-family: 'IM Fell English', serif; opacity: 0.35;
+    }
+    .connect-btn:hover { border-color: var(--ink-dim); opacity: 0.8; }
+    .connect-btn.active { border-color: var(--ink); opacity: 1; color: var(--ink); }
   </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
 
@@ -405,13 +477,17 @@
     </div>
   </header>
 
-  <main class="grid" id="grid"></main>
-  <p class="no-results" id="noResults">nothing found</p>
-
-  <footer>
-    <p>On My Mind &ensp;·&ensp; a personal archive</p>
-  </footer>
 </div>
+
+<canvas id="palace-canvas"></canvas>
+<div id="labels-container"></div>
+
+<div class="card-detail" id="cardDetail">
+  <button class="card-detail-close" id="cardDetailClose">✕</button>
+  <div id="cardDetailContent"></div>
+</div>
+
+<div class="connection-hint" id="connectionHint">click a second node to connect · esc to cancel</div>
 
 <!-- Lock button (visible always, opens password gate) -->
 <button class="lock-btn" id="lockBtn" title="Admin">✦</button>
@@ -428,6 +504,9 @@
 
 <!-- Add button (hidden until authenticated) -->
 <button class="add-btn" id="addBtn" title="Add entry" style="display:none">+</button>
+
+<!-- Connect button (hidden until authenticated) -->
+<button class="connect-btn" id="connectBtn" title="Connect nodes">⌘</button>
 
 <!-- Modal -->
 <div class="modal-overlay" id="modalOverlay">
@@ -487,79 +566,364 @@
     return sessionStorage.getItem(SESSION_KEY) === '1';
   }
 
-  // ── RENDER ──
-  function renderAll(query) {
-    const grid = document.getElementById('grid');
-    const noResults = document.getElementById('noResults');
-    grid.innerHTML = '';
-    const cards = loadCards();
-    const q = (query || '').toLowerCase().trim();
-    let shown = 0;
-    cards.forEach((card, i) => {
-      if (q) {
-        const haystack = (card.title + ' ' + card.cat + ' ' + card.desc).toLowerCase();
-        if (!haystack.includes(q)) return;
-      }
-      grid.appendChild(renderCard(card, i, 0.05 + shown * 0.06));
-      shown++;
-    });
-    noResults.style.display = (shown === 0 && q) ? 'block' : 'none';
+  // ── 3D MIND PALACE ──
+  let scene, camera, renderer, controls, raycaster, mouse;
+  let nodes = [], edges = [], labels = [];
+  let selectedNode = null;
+  let connectMode = false, connectSource = null;
+  const CONNECTIONS_KEY = 'onmymind_connections';
+  const POSITIONS_KEY   = 'onmymind_positions';
+
+  function loadConnections() {
+    try { return JSON.parse(localStorage.getItem(CONNECTIONS_KEY)) || []; } catch { return []; }
+  }
+  function saveConnections(c) { localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(c)); }
+  function loadPositions() {
+    try { return JSON.parse(localStorage.getItem(POSITIONS_KEY)) || {}; } catch { return {}; }
+  }
+  function savePositions(p) { localStorage.setItem(POSITIONS_KEY, JSON.stringify(p)); }
+
+  function getCategoryCluster(cat) {
+    const first = (cat || '').split('·')[0].trim().toLowerCase().split(' ')[0] || 'misc';
+    return first;
   }
 
-  function renderCard(card, index, delay) {
-    const article = document.createElement('article');
-    article.className = 'card';
-    article.style.animationDelay = delay + 's';
-    article.dataset.index = index;
+  function hashStr(s) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+    return h;
+  }
 
-    let imgHTML = '';
-    if (card.img) {
-      imgHTML = `<div class="card-img-wrap"><img src="${card.img}" alt="${card.title}" loading="lazy" /></div>`;
+  function clusterPos(cat) {
+    const h = hashStr(getCategoryCluster(cat));
+    const angle = (Math.abs(h) % 360) * Math.PI / 180;
+    const r = 120 + (Math.abs(h >> 8) % 80);
+    return { x: Math.cos(angle) * r, y: (Math.abs(h >> 16) % 80) - 40, z: Math.sin(angle) * r };
+  }
+
+  function initPalace() {
+    const canvas = document.getElementById('palace-canvas');
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x070706, 1);
+
+    scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x070706, 0.004);
+
+    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+    camera.position.set(0, 30, 280);
+
+    controls = new THREE.OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 20;
+    controls.maxDistance = 800;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.3;
+
+    raycaster = new THREE.Raycaster();
+    mouse = new THREE.Vector2(-9999, -9999);
+
+    // Ambient + point lights
+    scene.add(new THREE.AmbientLight(0xede9e0, 0.15));
+    const pt = new THREE.PointLight(0xede9e0, 0.8, 600);
+    pt.position.set(0, 100, 0);
+    scene.add(pt);
+
+    // Particle field (background stars)
+    const starGeo = new THREE.BufferGeometry();
+    const starVerts = [];
+    for (let i = 0; i < 3000; i++) {
+      starVerts.push(
+        (Math.random() - 0.5) * 2000,
+        (Math.random() - 0.5) * 2000,
+        (Math.random() - 0.5) * 2000
+      );
+    }
+    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts, 3));
+    const starMat = new THREE.PointsMaterial({ color: 0xede9e0, size: 0.4, transparent: true, opacity: 0.25 });
+    scene.add(new THREE.Points(starGeo, starMat));
+
+    buildNodes();
+    buildEdges();
+
+    window.addEventListener('resize', onResize);
+    canvas.addEventListener('click', onCanvasClick);
+    canvas.addEventListener('mousemove', onMouseMove);
+
+    document.getElementById('cardDetailClose').addEventListener('click', () => {
+      document.getElementById('cardDetail').classList.remove('open');
+      if (selectedNode) {
+        selectedNode.mesh.material.emissiveIntensity = 0;
+        selectedNode = null;
+      }
+      controls.autoRotate = true;
+    });
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        if (connectMode) {
+          connectMode = false;
+          connectSource = null;
+          document.getElementById('connectBtn').classList.remove('active');
+          document.getElementById('connectionHint').classList.remove('show');
+          if (nodes.length) nodes.forEach(n => { n.mesh.material.emissiveIntensity = 0; });
+        }
+        document.getElementById('cardDetail').classList.remove('open');
+        if (selectedNode) { selectedNode.mesh.material.emissiveIntensity = 0; selectedNode = null; }
+        controls.autoRotate = true;
+      }
+    });
+
+    const connectBtn = document.getElementById('connectBtn');
+    connectBtn.addEventListener('click', () => {
+      connectMode = !connectMode;
+      connectBtn.classList.toggle('active', connectMode);
+      if (!connectMode) {
+        connectSource = null;
+        document.getElementById('connectionHint').classList.remove('show');
+        nodes.forEach(n => { if (n !== selectedNode) n.mesh.material.emissiveIntensity = 0; });
+      }
+    });
+
+    animate();
+  }
+
+  function makeNodeTexture() {
+    const size = 256;
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = 'rgba(7,7,6,0)';
+    ctx.fillRect(0, 0, size, size);
+    const grad = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+    grad.addColorStop(0,   'rgba(237,233,224,0.25)');
+    grad.addColorStop(0.4, 'rgba(237,233,224,0.08)');
+    grad.addColorStop(1,   'rgba(237,233,224,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    return new THREE.CanvasTexture(c);
+  }
+
+  function buildNodes() {
+    nodes.forEach(n => { scene.remove(n.mesh); scene.remove(n.glowMesh); });
+    document.getElementById('labels-container').innerHTML = '';
+    nodes = [];
+
+    const cards = loadCards();
+    const savedPos = loadPositions();
+    const glowTex = makeNodeTexture();
+
+    cards.forEach((card, i) => {
+      const cp = clusterPos(card.cat);
+      const savedP = savedPos[i];
+      const spread = 35;
+      const h = hashStr((card.title || '') + i);
+      const x = savedP ? savedP.x : cp.x + ((Math.abs(h)       % spread) - spread/2);
+      const y = savedP ? savedP.y : cp.y + ((Math.abs(h >> 4)  % spread) - spread/2);
+      const z = savedP ? savedP.z : cp.z + ((Math.abs(h >> 8)  % spread) - spread/2);
+
+      const geo = new THREE.SphereGeometry(3.5, 16, 16);
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0xede9e0, emissive: 0xede9e0, emissiveIntensity: 0,
+        transparent: true, opacity: 0.85, roughness: 0.6, metalness: 0.1
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(x, y, z);
+      mesh.userData = { index: i, card };
+      scene.add(mesh);
+
+      const spriteMat = new THREE.SpriteMaterial({
+        map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+      });
+      const sprite = new THREE.Sprite(spriteMat);
+      sprite.scale.set(24, 24, 1);
+      sprite.position.copy(mesh.position);
+      scene.add(sprite);
+
+      const label = document.createElement('div');
+      label.className = 'node-label';
+      label.textContent = card.title || card.cat || '—';
+      document.getElementById('labels-container').appendChild(label);
+
+      nodes.push({ mesh, glowMesh: sprite, label, card, index: i });
+    });
+  }
+
+  function buildEdges() {
+    edges.forEach(e => scene.remove(e));
+    edges = [];
+
+    const connections = loadConnections();
+    const points = [];
+
+    // Auto-connect by shared category cluster
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const ci = getCategoryCluster(nodes[i].card.cat);
+        const cj = getCategoryCluster(nodes[j].card.cat);
+        if (ci === cj && ci !== 'misc') {
+          points.push(nodes[i].mesh.position.clone(), nodes[j].mesh.position.clone());
+        }
+      }
+    }
+    // Manual connections
+    connections.forEach(({ from, to }) => {
+      if (nodes[from] && nodes[to]) {
+        points.push(nodes[from].mesh.position.clone(), nodes[to].mesh.position.clone());
+      }
+    });
+
+    if (points.length > 0) {
+      const geo = new THREE.BufferGeometry().setFromPoints(points);
+      const mat = new THREE.LineBasicMaterial({ color: 0x2e2c26, transparent: true, opacity: 0.5 });
+      const line = new THREE.LineSegments(geo, mat);
+      scene.add(line);
+      edges.push(line);
+    }
+  }
+
+  function renderAll(query) {
+    const q = (query || '').toLowerCase().trim();
+    nodes.forEach(n => {
+      if (!q) {
+        n.mesh.material.opacity = 0.85;
+        n.glowMesh.material.opacity = 1;
+        n.label.style.opacity = '0.7';
+      } else {
+        const hay = ((n.card.title || '') + ' ' + (n.card.cat || '') + ' ' + (n.card.desc || '')).toLowerCase();
+        const match = hay.includes(q);
+        n.mesh.material.opacity   = match ? 0.85 : 0.08;
+        n.glowMesh.material.opacity = match ? 1 : 0.05;
+        n.label.style.opacity     = match ? '0.9' : '0.05';
+      }
+    });
+  }
+
+  function onResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  function onMouseMove(e) {
+    mouse.x = (e.clientX / window.innerWidth)  *  2 - 1;
+    mouse.y = (e.clientY / window.innerHeight) * -2 + 1;
+  }
+
+  function onCanvasClick(e) {
+    mouse.x = (e.clientX / window.innerWidth)  *  2 - 1;
+    mouse.y = (e.clientY / window.innerHeight) * -2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects(nodes.map(n => n.mesh));
+    if (!hits.length) return;
+    const node = nodes.find(n => n.mesh === hits[0].object);
+    if (!node) return;
+
+    if (connectMode) {
+      if (!connectSource) {
+        connectSource = node;
+        node.mesh.material.emissiveIntensity = 0.6;
+        document.getElementById('connectionHint').classList.add('show');
+      } else if (connectSource !== node) {
+        const conns = loadConnections();
+        const exists = conns.some(c =>
+          (c.from === connectSource.index && c.to === node.index) ||
+          (c.from === node.index && c.to === connectSource.index)
+        );
+        if (!exists) { conns.push({ from: connectSource.index, to: node.index }); saveConnections(conns); }
+        connectSource.mesh.material.emissiveIntensity = 0;
+        connectSource = null;
+        connectMode = false;
+        document.getElementById('connectBtn').classList.remove('active');
+        document.getElementById('connectionHint').classList.remove('show');
+        buildEdges();
+      }
+      return;
     }
 
-    const authed = isAuthed();
-    const ctrlHTML = `
-      <div class="card-controls${authed ? ' visible' : ''}" data-index="${index}">
-        <button class="card-ctrl-btn edit" title="Edit" data-index="${index}">✎</button>
-        <button class="card-ctrl-btn delete" title="Delete" data-index="${index}">✕</button>
-      </div>`;
+    if (selectedNode) selectedNode.mesh.material.emissiveIntensity = 0;
+    selectedNode = node;
+    node.mesh.material.emissiveIntensity = 0.5;
+    controls.autoRotate = false;
+    showCardDetail(node.card, node.index);
+  }
 
-    article.innerHTML = `
-      ${ctrlHTML}
-      ${imgHTML}
-      <div class="card-body">
-        <div class="card-rule"></div>
-        <span class="card-cat">${card.cat}</span>
-        <h2 class="card-title">${card.title}</h2>
-        <p class="card-desc">${card.desc}</p>
-      </div>`;
+  function showCardDetail(card, index) {
+    const panel   = document.getElementById('cardDetail');
+    const content = document.getElementById('cardDetailContent');
+    const authed  = isAuthed();
+    content.innerHTML = `
+      ${card.img ? `<img src="${card.img}" alt="${card.title || ''}" />` : ''}
+      <div class="card-detail-rule"></div>
+      <span class="card-cat">${card.cat || ''}</span>
+      <h2 class="card-title">${card.title || ''}</h2>
+      <p class="card-desc">${card.desc || ''}</p>
+      ${authed ? `<div class="card-detail-controls">
+        <button id="detailEdit">edit</button>
+        <button id="detailDelete">delete</button>
+      </div>` : ''}
+    `;
+    if (authed) {
+      document.getElementById('detailEdit').addEventListener('click', () => {
+        document.getElementById('editIndex').value = index;
+        document.getElementById('editTitle').value = card.title;
+        document.getElementById('editCat').value   = card.cat;
+        document.getElementById('editDesc').value  = card.desc;
+        editImgData = '';
+        document.getElementById('editImgPreview').style.display = 'none';
+        document.getElementById('editUploadLabel').textContent  = 'Click to replace image';
+        document.getElementById('editOverlay').classList.add('open');
+      });
+      document.getElementById('detailDelete').addEventListener('click', () => {
+        if (!confirm('Delete this entry?')) return;
+        const cards = loadCards();
+        cards.splice(index, 1);
+        saveCards(cards);
+        panel.classList.remove('open');
+        selectedNode = null;
+        buildNodes();
+        buildEdges();
+      });
+    }
+    panel.classList.add('open');
+  }
 
-    // Delete
-    article.querySelector('.card-ctrl-btn.delete').addEventListener('click', e => {
-      e.stopPropagation();
-      if (!confirm('Delete this entry?')) return;
-      const cards = loadCards();
-      cards.splice(index, 1);
-      saveCards(cards);
-      renderAll(document.getElementById('searchInput').value);
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+
+    nodes.forEach(n => {
+      const pos = n.mesh.position.clone().project(camera);
+      const x = ( pos.x *  0.5 + 0.5) * window.innerWidth;
+      const y = (-pos.y *  0.5 + 0.5) * window.innerHeight;
+      if (pos.z < 1) {
+        n.label.style.display = 'block';
+        n.label.style.left = x + 'px';
+        n.label.style.top  = (y + 18) + 'px';
+      } else {
+        n.label.style.display = 'none';
+      }
+      // Gentle breathing pulse
+      const t = Date.now() * 0.001;
+      const phase = (hashStr(n.card.title || '') & 0xffff) * 0.0001;
+      n.mesh.scale.setScalar(1 + Math.sin(t + phase) * 0.04);
     });
 
-    // Edit
-    article.querySelector('.card-ctrl-btn.edit').addEventListener('click', e => {
-      e.stopPropagation();
-      const cards = loadCards();
-      const card  = cards[index];
-      document.getElementById('editIndex').value = index;
-      document.getElementById('editTitle').value = card.title;
-      document.getElementById('editCat').value   = card.cat;
-      document.getElementById('editDesc').value  = card.desc;
-      editImgData = '';
-      document.getElementById('editImgPreview').style.display = 'none';
-      document.getElementById('editUploadLabel').textContent  = 'Click to replace image';
-      document.getElementById('editOverlay').classList.add('open');
-    });
+    // Hover highlight
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects(nodes.map(n => n.mesh));
+    nodes.forEach(n => { if (n !== selectedNode) n.mesh.material.emissiveIntensity = 0; });
+    if (hits.length) {
+      const hovered = nodes.find(n => n.mesh === hits[0].object);
+      if (hovered && hovered !== selectedNode) hovered.mesh.material.emissiveIntensity = 0.25;
+      document.getElementById('palace-canvas').style.cursor = 'pointer';
+    } else {
+      document.getElementById('palace-canvas').style.cursor = 'crosshair';
+    }
 
-    return article;
+    renderer.render(scene, camera);
   }
 
   // ── SEARCH ──
@@ -616,7 +980,8 @@
     const cards = loadCards();
     cards.unshift({ title, cat, desc, img: currentImgData });
     saveCards(cards);
-    renderAll(searchInput.value);
+    buildNodes();
+    buildEdges();
     document.getElementById('inputTitle').value = '';
     document.getElementById('inputCat').value   = '';
     document.getElementById('inputDesc').value  = '';
@@ -661,7 +1026,8 @@
     cards[idx].desc  = document.getElementById('editDesc').value.trim();
     if (editImgData) cards[idx].img = editImgData;
     saveCards(cards);
-    renderAll(searchInput.value);
+    buildNodes();
+    buildEdges();
     editOverlay.classList.remove('open');
   });
 
@@ -676,13 +1042,13 @@
     sessionStorage.setItem(SESSION_KEY, '1');
     lockBtn.style.display = 'none';
     addBtn.style.display  = 'flex';
-    // Show all card controls
-    document.querySelectorAll('.card-controls').forEach(el => el.classList.add('visible'));
+    document.getElementById('connectBtn').style.display = 'flex';
   }
 
   if (isAuthed()) {
     lockBtn.style.display = 'none';
     addBtn.style.display  = 'flex';
+    document.getElementById('connectBtn').style.display = 'flex';
   }
 
   lockBtn.addEventListener('click', () => {
@@ -714,7 +1080,7 @@
   });
 
   // ── INIT ──
-  renderAll();
+  initPalace();
 </script>
 </body>
 </html>
