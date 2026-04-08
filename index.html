@@ -725,64 +725,70 @@
     animate();
   }
 
+  function drawTextCard(ctx, card, W, H) {
+    ctx.fillStyle = '#0e0d0b';
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = '#2e2c26';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(8, 8, W - 16, H - 16);
+    ctx.fillStyle = '#2e2c26';
+    ctx.fillRect(0, H * 0.85, W, H * 0.15);
+    ctx.fillStyle = '#8a8278';
+    ctx.font = '18px serif';
+    ctx.fillText(card.cat || '', 20, 50);
+    ctx.fillStyle = '#ede9e0';
+    ctx.font = 'italic bold 28px serif';
+    const words = (card.title || '').split(' ');
+    let line = '', ty = H / 2 - 30;
+    for (const w of words) {
+      const test = line + w + ' ';
+      if (ctx.measureText(test).width > W - 40 && line) {
+        ctx.fillText(line, 20, ty); line = w + ' '; ty += 40;
+      } else { line = test; }
+    }
+    ctx.fillText(line, 20, ty);
+    ctx.fillStyle = '#2e2c26';
+    ctx.font = '14px serif';
+    ctx.fillText('· · ·', W / 2 - 20, H * 0.9);
+  }
+
+  function drawImageCard(ctx, img, card, W, H) {
+    ctx.fillStyle = '#0e0d0b';
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(img, 0, 0, W, H * 0.75);
+    ctx.fillStyle = '#0e0d0b';
+    ctx.fillRect(0, H * 0.75, W, H * 0.25);
+    ctx.fillStyle = 'rgba(46,44,38,0.9)';
+    ctx.fillRect(0, H * 0.73, W, 2);
+    ctx.fillStyle = '#8a8278';
+    ctx.font = '18px serif';
+    ctx.fillText(card.cat || '', 20, H * 0.79);
+    ctx.fillStyle = '#ede9e0';
+    ctx.font = 'italic 22px serif';
+    const title = card.title || '';
+    ctx.fillText(title.length > 32 ? title.slice(0, 32) + '…' : title, 20, H * 0.88);
+  }
+
   function makeCardTexture(card) {
     const W = 512, H = 384;
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
     const ctx = c.getContext('2d');
+    const tex = new THREE.CanvasTexture(c);
 
     if (card.img) {
-      // Draw image
+      drawTextCard(ctx, card, W, H); // placeholder while image loads
       const img = new Image();
+      img.onload = () => {
+        drawImageCard(ctx, img, card, W, H);
+        tex.needsUpdate = true;
+      };
       img.src = card.img;
-      // Draw synchronously-ish by checking if already loaded
-      ctx.fillStyle = '#0e0d0b';
-      ctx.fillRect(0, 0, W, H);
-      try {
-        ctx.drawImage(img, 0, 0, W, H * 0.75);
-      } catch(e) {}
-      // Card footer
-      ctx.fillStyle = '#0e0d0b';
-      ctx.fillRect(0, H * 0.75, W, H * 0.25);
-      ctx.fillStyle = 'rgba(46,44,38,0.8)';
-      ctx.fillRect(0, H * 0.73, W, 2);
-      ctx.fillStyle = '#8a8278';
-      ctx.font = '18px serif';
-      ctx.fillText(card.cat || '', 20, H * 0.79);
-      ctx.fillStyle = '#ede9e0';
-      ctx.font = 'italic 22px serif';
-      const title = card.title || '';
-      ctx.fillText(title.length > 32 ? title.slice(0,32)+'…' : title, 20, H * 0.88);
     } else {
-      // Text-only card
-      ctx.fillStyle = '#0e0d0b';
-      ctx.fillRect(0, 0, W, H);
-      ctx.strokeStyle = '#2e2c26';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(8, 8, W-16, H-16);
-      ctx.fillStyle = '#2e2c26';
-      ctx.fillRect(0, H * 0.85, W, H * 0.15);
-      ctx.fillStyle = '#8a8278';
-      ctx.font = '18px serif';
-      ctx.fillText(card.cat || '', 20, 50);
-      ctx.fillStyle = '#ede9e0';
-      ctx.font = 'italic bold 28px serif';
-      // Word-wrap title
-      const words = (card.title || '').split(' ');
-      let line = '', y = H / 2 - 30;
-      for (const w of words) {
-        const test = line + w + ' ';
-        if (ctx.measureText(test).width > W - 40 && line) {
-          ctx.fillText(line, 20, y); line = w + ' '; y += 40;
-        } else { line = test; }
-      }
-      ctx.fillText(line, 20, y);
-      // Subtle ornament
-      ctx.fillStyle = '#2e2c26';
-      ctx.font = '14px serif';
-      ctx.fillText('· · ·', W/2 - 20, H * 0.9);
+      drawTextCard(ctx, card, W, H);
     }
-    return new THREE.CanvasTexture(c);
+
+    return tex;
   }
 
   function buildNodes() {
